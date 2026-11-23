@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        sanitizer: [none, asan, ubsan, tsan]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libsqlite3-dev libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja || true
+
+      - name: Configure
+        run: |
+          flag=""
+          case "${{ matrix.sanitizer }}" in
+            asan) flag="-DENABLE_ASAN=ON" ;;
+            ubsan) flag="-DENABLE_UBSAN=ON" ;;
+            tsan) flag="-DENABLE_TSAN=ON" ;;
+          esac
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug $flag
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
